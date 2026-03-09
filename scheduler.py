@@ -1,37 +1,20 @@
-import schedule
-import time
+import schedule, time, threading
 from datetime import datetime
-from dotenv import load_dotenv
 
-load_dotenv()
-
-def run_fetch():
-    print("\n" + "=" * 50)
-    print(f"AUTO FETCH: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 50)
+def fetch_job():
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] Auto-fetching data...")
     try:
-        from fetchers.fetch_gsc import fetch_gsc_data
-        fetch_gsc_data()
+        from main import run_fetch
+        run_fetch(28)
+        print("Auto-fetch complete.")
     except Exception as e:
-        print(f"GSC Error: {e}")
-    try:
-        from fetchers.fetch_ga4 import fetch_ga4_data
-        fetch_ga4_data()
-    except Exception as e:
-        print(f"GA4 Error: {e}")
-    print(f"Auto fetch complete: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Auto-fetch error: {e}")
 
-# Run every day at 8:00 AM
-schedule.every().day.at("08:00").do(run_fetch)
+# Run every day at 08:00
+schedule.every().day.at("08:00").do(fetch_job)
 
-print("=" * 50)
-print("SEO AUTO SCHEDULER RUNNING")
-print("Fetches fresh data every day at 08:00 AM")
-print("Press Ctrl+C to stop")
-print("=" * 50)
-
-# Run once immediately
-run_fetch()
+print("Scheduler running — auto-fetch at 08:00 daily.")
+print("Press Ctrl+C to stop.")
 
 while True:
     schedule.run_pending()

@@ -8,3 +8,4 @@ plotly
 pandas
 schedule
 requests
+reportlab

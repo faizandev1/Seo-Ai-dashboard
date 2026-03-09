@@ -1,57 +1,63 @@
-# SEO AI Dashboard
+# SEO AI Dashboard — best4juniors.nl
 
-Real-time SEO stats from Google Search Console + GA4 with AI analysis.
+Professional SEO monitoring dashboard built for Markitpapa.
+Pulls 100% real data from Google Search Console + Google Analytics 4.
 
-## SETUP (5 steps)
+---
 
-### Step 1 - Add your secret key file
-Copy your Google service account JSON file into this folder.
-Rename it to: service-account-key.json
+## Quick Start (3 Steps)
 
-### Step 2 - Create your .env file
-Copy .env.example and rename to .env
+### Step 1 — Setup your .env file
+Copy `.env.example` → rename to `.env`
 Fill in your real values:
-- GSC_PROPERTY_URL = your website URL exactly as shown in Search Console
-- GA4_PROPERTY_ID = numbers only (e.g. 500557472)
-- ANTHROPIC_API_KEY = get from console.anthropic.com
+```
+GOOGLE_SERVICE_ACCOUNT_KEY=service-account-key.json
+GSC_PROPERTY_URL=https://best4juniors.nl/
+GA4_PROPERTY_ID=500557472
+ANTHROPIC_API_KEY=your-key-here
+SITE_NAME=best4juniors.nl
+```
 
-### Step 3 - Install dependencies
-Open terminal in this folder and run:
-pip install -r requirements.txt
+### Step 2 — Add your Google key file
+Place your `service-account-key.json` in the same folder.
 
-### Step 4 - Fetch your data
-python main.py
+### Step 3 — Double click START_DASHBOARD.bat
+That's it. Dashboard opens in your browser automatically.
 
-### Step 5 - Run the dashboard
-python dashboard.py
-Then open browser: http://localhost:5000
+---
 
-## DAILY USE
+## Files Explained
 
-Fetch fresh data:
-python main.py
+| File | What it does |
+|------|-------------|
+| `START_DASHBOARD.bat` | **Double click this** — launches everything |
+| `FETCH_DATA.bat` | Manually refresh data from Google |
+| `STOP_DASHBOARD.bat` | Stop the dashboard |
+| `dashboard.py` | Main dashboard web app |
+| `main.py` | Fetches data from GSC + GA4 |
+| `report_gen.py` | Generates PDF reports |
+| `database.py` | SQLite database for history |
+| `alerts.py` | Detects problems automatically |
 
-Ask AI questions about your SEO:
-python analyze.py
+---
 
-Auto-refresh every day at 8am:
-python scheduler.py
+## Dashboard Sections
 
-## IMPORTANT - GSC Permission Fix
-Make sure you added this email to your Search Console property:
-Go to Search Console > Settings > Users and Permissions > Add User
+- **Overview** — All KPI cards, alerts, charts, target tracker
+- **Keywords** — All keywords with positions, changes, dying/improved
+- **Traffic** — Sessions, channels, daily trend, top pages
+- **Compare Periods** — Any period vs any period, baseline comparison
+- **SEO Accountability** — Track what your SEO person actually did
+- **Reports** — Generate PDF, download, compare archived reports
 
-## FILE STRUCTURE
-service-account-key.json  <- YOUR SECRET KEY (never share)
-.env                      <- YOUR SECRETS (never share)
-main.py                   <- Fetches all data
-dashboard.py              <- Visual dashboard
-analyze.py                <- AI question engine
-scheduler.py              <- Auto daily refresh
-fetchers/
-  fetch_gsc.py            <- Search Console fetcher
-  fetch_ga4.py            <- GA4 fetcher
-data/
-  gsc/                    <- Keyword + page data
-  ga4/                    <- Traffic data
-reports/                  <- Saved AI analyses
+---
+
+## Security
+
+- `.env` and `service-account-key.json` are in `.gitignore`
+- Never push these to GitHub
+- Data stays on your computer
+
+---
+
+Built by Markitpapa | March 2026

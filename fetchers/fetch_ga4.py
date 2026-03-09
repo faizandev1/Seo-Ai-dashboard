@@ -1,99 +1,102 @@
-import os
-import json
+import os, json
 from datetime import datetime, timedelta
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension
 from google.oauth2 import service_account
 from dotenv import load_dotenv
-
 load_dotenv()
 
-SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_KEY', 'service-account-key.json')
-GA4_PROPERTY_ID = os.getenv('GA4_PROPERTY_ID')
+def get_client():
+    creds = service_account.Credentials.from_service_account_file(
+        os.getenv('GOOGLE_SERVICE_ACCOUNT_KEY', 'service-account-key.json'),
+        scopes=['https://www.googleapis.com/auth/analytics.readonly'])
+    return BetaAnalyticsDataClient(credentials=creds)
 
-def get_ga4_client():
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=['https://www.googleapis.com/auth/analytics.readonly']
-    )
-    return BetaAnalyticsDataClient(credentials=credentials)
+def fetch_ga4_data(days=28):
+    print(f"Connecting to Google Analytics 4 ({days} days)...")
+    client = BetaAnalyticsDataClient(credentials=service_account.Credentials.from_service_account_file(
+        os.getenv('GOOGLE_SERVICE_ACCOUNT_KEY', 'service-account-key.json'),
+        scopes=['https://www.googleapis.com/auth/analytics.readonly']))
 
-def fetch_ga4_data():
-    print("Connecting to Google Analytics 4...")
-    client = get_ga4_client()
+    prop = f"properties/{os.getenv('GA4_PROPERTY_ID')}"
+    end   = datetime.now()
+    start = end - timedelta(days=days)
+    prev_end   = start - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=days)
 
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
-    print(f"Fetching GA4 data from {start_date} to {end_date}")
+    end_str        = end.strftime('%Y-%m-%d')
+    start_str      = start.strftime('%Y-%m-%d')
+    prev_end_str   = prev_end.strftime('%Y-%m-%d')
+    prev_start_str = prev_start.strftime('%Y-%m-%d')
 
-    # Traffic by channel
-    channel_response = client.run_report(RunReportRequest(
-        property=f"properties/{GA4_PROPERTY_ID}",
-        date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
-        dimensions=[Dimension(name="sessionDefaultChannelGroup")],
-        metrics=[
-            Metric(name="sessions"),
-            Metric(name="totalUsers"),
-            Metric(name="bounceRate"),
-            Metric(name="averageSessionDuration"),
-        ]
-    ))
+    def run(dims, metrics, start_d, end_d, limit=100):
+        req = RunReportRequest(
+            property=prop,
+            date_ranges=[DateRange(start_date=start_d, end_date=end_d)],
+            dimensions=[Dimension(name=d) for d in dims],
+            metrics=[Metric(name=m) for m in metrics],
+            limit=limit)
+        resp = client.run_report(req)
+        rows = []
+        for row in resp.rows:
+            r = {}
+            for i, d in enumerate(dims):
+                r[d] = row.dimension_values[i].value
+            for i, m in enumerate(metrics):
+                r[m] = row.metric_values[i].value
+            rows.append(r)
+        return rows
 
-    # Top pages
-    pages_response = client.run_report(RunReportRequest(
-        property=f"properties/{GA4_PROPERTY_ID}",
-        date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
-        dimensions=[Dimension(name="pagePath")],
-        metrics=[
-            Metric(name="sessions"),
-            Metric(name="totalUsers"),
-            Metric(name="bounceRate"),
-            Metric(name="averageSessionDuration"),
-        ]
-    ))
+    print("Fetching channel data...")
+    channels_cur  = run(['sessionDefaultChannelGroup'],
+                        ['sessions','totalUsers','bounceRate','averageSessionDuration'],
+                        start_str, end_str)
+    channels_prev = run(['sessionDefaultChannelGroup'],
+                        ['sessions','totalUsers'],
+                        prev_start_str, prev_end_str)
 
-    channels = []
-    for row in channel_response.rows:
-        channels.append({
-            'channel': row.dimension_values[0].value,
-            'sessions': row.metric_values[0].value,
-            'users': row.metric_values[1].value,
-            'bounce_rate': row.metric_values[2].value,
-            'avg_session_duration': row.metric_values[3].value,
-        })
+    print("Fetching page data...")
+    pages_cur = run(['pagePath'],
+                    ['sessions','totalUsers','bounceRate','averageSessionDuration'],
+                    start_str, end_str, limit=200)
 
-    pages = []
-    for row in pages_response.rows:
-        pages.append({
-            'page': row.dimension_values[0].value,
-            'sessions': row.metric_values[0].value,
-            'users': row.metric_values[1].value,
-            'bounce_rate': row.metric_values[2].value,
-            'avg_session_duration': row.metric_values[3].value,
-        })
+    print("Fetching daily trend...")
+    daily = run(['date'], ['sessions','totalUsers'],
+                start_str, end_str, limit=90)
+
+    organic_cur  = next((int(r['sessions']) for r in channels_cur
+                         if 'organic' in r.get('sessionDefaultChannelGroup','').lower()), 0)
+    organic_prev = next((int(r['sessions']) for r in channels_prev
+                         if 'organic' in r.get('sessionDefaultChannelGroup','').lower()), 0)
+    total_cur    = sum(int(r.get('sessions',0)) for r in channels_cur)
+    total_prev   = sum(int(r.get('sessions',0)) for r in channels_prev)
+
+    ga4_data = {
+        'fetched_at': datetime.now().isoformat(),
+        'period': {'days': days, 'start': start_str, 'end': end_str},
+        'channels': channels_cur,
+        'channels_prev': channels_prev,
+        'pages': pages_cur,
+        'daily': daily,
+        'summary': {
+            'organic_sessions': organic_cur,
+            'total_sessions':   total_cur,
+            'total_users':      sum(int(r.get('totalUsers',0)) for r in channels_cur),
+            'avg_bounce_rate':  round(sum(float(r.get('bounceRate',0)) for r in channels_cur) /
+                                      max(len(channels_cur),1) * 100, 1),
+        },
+        'prev_summary': {
+            'organic_sessions': organic_prev,
+            'total_sessions':   total_prev,
+        }
+    }
 
     os.makedirs('data/ga4', exist_ok=True)
+    with open('data/ga4/data.json', 'w') as f:
+        json.dump(ga4_data, f, indent=2)
 
-    channel_data = {
-        'fetched_at': datetime.now().isoformat(),
-        'date_range': {'start': start_date, 'end': end_date},
-        'channels': channels
-    }
-    pages_data = {
-        'fetched_at': datetime.now().isoformat(),
-        'date_range': {'start': start_date, 'end': end_date},
-        'pages': pages
-    }
+    print(f"Saved: {len(channels_cur)} channels, {len(pages_cur)} pages, {len(daily)} daily points")
+    return ga4_data
 
-    with open('data/ga4/channels.json', 'w') as f:
-        json.dump(channel_data, f, indent=2)
-    print(f"Saved {len(channels)} channels to data/ga4/channels.json")
-
-    with open('data/ga4/pages.json', 'w') as f:
-        json.dump(pages_data, f, indent=2)
-    print(f"Saved {len(pages)} pages to data/ga4/pages.json")
-
-    return channel_data, pages_data
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     fetch_ga4_data()
